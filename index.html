@@ -119,14 +119,14 @@
         }
 
         class Particle {
-            constructor(x, y, color, velocity, lifespan = 100) {
+            constructor(x, y, color, velocity, lifespan = 100, size = null) {
                 this.pos = new Vector2(x, y);
                 this.vel = velocity;
                 this.color = color;
                 this.lifespan = lifespan;
                 this.maxLifespan = lifespan;
                 this.opacity = 1;
-                this.size = Math.random() * 2 + 1;
+                this.size = size || (Math.random() * 2 + 1);
             }
 
             update() {
@@ -234,10 +234,32 @@
                 this.particles = [];
                 this.textParticles = [];
                 this.blessing = blessing;
-                const blessingTexts = ['马', '万事如意', '发财', '平安'];
+                const blessingTexts = [
+                    '月亮的盐',
+                    '荒原',
+                    '重叠',
+                    '私语',
+                    '回声',
+                    '琥珀',
+                    '熄灭',
+                    '漫游',
+                    '瞬时',
+                    '蓝色的忧郁',
+                    '潮汐',
+                    '悬浮',
+                    '颗粒',
+                    '降落',
+                    '透明',
+                    '缝隙',
+                    '旷野',
+                    '呼吸',
+                    '镀金',
+                    '幸存'
+                ];
                 this.text = blessing ? blessing : blessingTexts[Math.floor(Math.random() * blessingTexts.length)];
                 this.speed = Math.random() * 3 + 8;
                 this.trail = [];
+                this.shouldBeLobster = Math.random() < 0.5; // 50% 概率生成龙虾形状
             }
 
             update() {
@@ -271,40 +293,140 @@
 
             explode() {
                 this.isExploded = true;
-                const colors = [
-                    'rgba(255, 100, 100, 1)',
-                    'rgba(255, 215, 0, 1)',
-                    'rgba(255, 200, 200, 1)',
-                    'rgba(255, 255, 200, 1)'
-                ];
 
-                // 创建普通粒子
-                for (let i = 0; i < 80; i++) {
-                    const angle = (Math.PI * 2 * i) / 80;
-                    const vel = Math.random() * 8 + 2;
-                    const vx = Math.cos(angle) * vel;
-                    const vy = Math.sin(angle) * vel - 2;
-                    const color = colors[Math.floor(Math.random() * colors.length)];
-                    this.particles.push(new Particle(this.pos.x, this.pos.y, color, new Vector2(vx, vy)));
+                if (this.shouldBeLobster) {
+                    // 龙虾专属颜色 - 更鲜艳的橙色和红色
+                    const lobsterColors = [
+                        'rgba(255, 100, 0, 1)',     // 深橙色
+                        'rgba(255, 150, 0, 1)',     // 橙黄色
+                        'rgba(255, 120, 50, 1)',    // 珊瑚橙
+                        'rgba(255, 200, 100, 1)',   // 金黄色
+                        'rgba(255, 80, 20, 1)',     // 橙红色
+                        'rgba(255, 60, 0, 1)',      // 深红橙
+                        'rgba(255, 180, 60, 1)'     // 亮橙色
+                    ];
+                    console.log('🦞 生成龙虾形状烟花！');
+                    // 龙虾形状有更大更密集的粒子
+                    this.createLobsterShape(lobsterColors);
+                } else {
+                    // 普通烟花减少粒子数量到40，让龙虾更明显
+                    const normalColors = [
+                        'rgba(255, 100, 100, 1)',
+                        'rgba(255, 215, 0, 1)',
+                        'rgba(255, 200, 200, 1)',
+                        'rgba(200, 150, 255, 1)'
+                    ];
+                    for (let i = 0; i < 40; i++) {
+                        const angle = (Math.PI * 2 * i) / 40;
+                        const vel = Math.random() * 8 + 2;
+                        const vx = Math.cos(angle) * vel;
+                        const vy = Math.sin(angle) * vel - 2;
+                        const color = normalColors[Math.floor(Math.random() * normalColors.length)];
+                        this.particles.push(new Particle(this.pos.x, this.pos.y, color, new Vector2(vx, vy)));
+                    }
                 }
 
-                // 创建文字粒子
-                const chars = this.text.split('');
+                // 创建文字粒子 - 每个词语完整显示，不拆分字符
+                this.textParticles.push(new TextParticle(this.pos.x, this.pos.y, this.text, 32));
+            }
+
+            createLobsterShape(colors) {
                 const centerX = this.pos.x;
                 const centerY = this.pos.y;
-                const radius = 60;
+                const scale = Math.random() * 40 + 70; // 增大龙虾大小（70-110之间）
 
-                if (chars.length === 1) {
-                    // 单字符（马）在中心
-                    this.textParticles.push(new TextParticle(centerX, centerY, this.text, 40));
-                } else {
-                    // 多字符（如意）环形排列
-                    chars.forEach((char, index) => {
-                        const angle = (index / chars.length) * Math.PI * 2;
-                        const x = centerX + Math.cos(angle) * radius;
-                        const y = centerY + Math.sin(angle) * radius;
-                        this.textParticles.push(new TextParticle(x, y, char, 28));
-                    });
+                // 龙虾轮廓点数组 - 从尾部到钳子的连续路径
+                const lobsterPoints = [
+                    // 尾巴（扇形）- 从中间开始
+                    {x: 0, y: -0.8},      // 尾尖中心
+                    {x: -0.2, y: -0.75},  {x: 0.2, y: -0.75},  // 尾尖两侧
+                    {x: -0.4, y: -0.6},   {x: 0.4, y: -0.6},   // 尾巴扩展
+                    {x: -0.5, y: -0.4},   {x: 0.5, y: -0.4},   // 尾巴基部
+
+                    // 身体中部（椭圆形）
+                    {x: -0.45, y: -0.2},  {x: 0.45, y: -0.2},
+                    {x: -0.48, y: 0},     {x: 0.48, y: 0},
+                    {x: -0.45, y: 0.2},   {x: 0.45, y: 0.2},
+                    {x: -0.4, y: 0.4},    {x: 0.4, y: 0.4},
+
+                    // 头部（较大）
+                    {x: -0.35, y: 0.6},   {x: 0.35, y: 0.6},
+                    {x: -0.3, y: 0.7},    {x: 0.3, y: 0.7},
+
+                    // 触角
+                    {x: -0.2, y: 0.75},   {x: 0.2, y: 0.75},
+                    {x: -0.25, y: 0.82},  {x: 0.25, y: 0.82},
+
+                    // 身体与钳子连接处
+                    {x: -0.15, y: 0.78},  {x: 0.15, y: 0.78},
+
+                    // 左钳子（大钳子）
+                    {x: -0.25, y: 0.75},  // 钳子基部
+                    {x: -0.4, y: 0.7},    // 钳子第一节
+                    {x: -0.55, y: 0.65},  // 钳子第二节
+                    {x: -0.7, y: 0.6},    // 钳子手掌
+                    {x: -0.85, y: 0.55},  // 下钳指
+                    {x: -0.75, y: 0.5},   // 上钳指
+
+                    // 右钳子
+                    {x: 0.25, y: 0.75},
+                    {x: 0.4, y: 0.7},
+                    {x: 0.55, y: 0.65},
+                    {x: 0.7, y: 0.6},
+                    {x: 0.85, y: 0.55},
+                    {x: 0.75, y: 0.5},
+
+                    // 腿部（身体两侧）
+                    // 左侧腿
+                    {x: -0.42, y: -0.1},  {x: -0.55, y: 0},
+                    {x: -0.45, y: 0.1},   {x: -0.58, y: 0.2},
+                    {x: -0.44, y: 0.3},   {x: -0.57, y: 0.4},
+
+                    // 右侧腿
+                    {x: 0.42, y: -0.1},   {x: 0.55, y: 0},
+                    {x: 0.45, y: 0.1},    {x: 0.58, y: 0.2},
+                    {x: 0.44, y: 0.3},    {x: 0.57, y: 0.4}
+                ];
+
+                // 创建龙虾轮廓粒子 - 更大更亮
+                lobsterPoints.forEach((point, index) => {
+                    const x = centerX + point.x * scale;
+                    const y = centerY + point.y * scale;
+                    const color = colors[Math.floor(Math.random() * colors.length)];
+
+                    // 给粒子一些随机的速度，使其有爆炸效果
+                    const angle = Math.atan2(point.y, point.x) || Math.random() * Math.PI * 2;
+                    const vel = Math.random() * 3 + 2; // 稍微慢一点，形状更明显
+                    const vx = Math.cos(angle) * vel;
+                    const vy = Math.sin(angle) * vel - 1;
+
+                    // 龙虾粒子更大（3-5像素）且生命周期更长
+                    const particleSize = Math.random() * 2 + 3;
+                    this.particles.push(new Particle(x, y, color, new Vector2(vx, vy), 200, particleSize));
+                });
+
+                // 额外添加更多内部填充粒子，让龙虾更饱满 - 使用更大的粒子
+                for (let i = 0; i < 80; i++) {
+                    const t = Math.random();
+                    const angle = Math.random() * Math.PI * 2;
+                    const r = Math.random() * 0.6;
+
+                    let x = centerX + Math.cos(angle) * r * scale;
+                    let y = centerY + Math.sin(angle) * r * scale * 0.8; // 稍微压扁，更像龙虾身体
+
+                    // 限制在龙虾形状内
+                    if (Math.abs(Math.sin(angle)) > 0.7) {
+                        // 上下区域限制更多
+                        y = centerY + Math.sin(angle) * r * scale * 0.6;
+                    }
+
+                    const color = colors[Math.floor(Math.random() * colors.length)];
+                    const vx = Math.cos(angle) * (Math.random() * 4 + 2);
+                    const vy = Math.sin(angle) * (Math.random() * 4 + 2) - 2;
+
+                    // 内部填充粒子也大一点（2-4像素）
+                    const particleSize = Math.random() * 2 + 2;
+                    this.particles.push(new Particle(x, y, color, new Vector2(vx, vy), 180, particleSize));
                 }
             }
 
@@ -365,16 +487,26 @@
             constructor(danmakuSystem) {
                 this.danmakuSystem = danmakuSystem;
                 this.mockBlessings = [
-                    '新年快乐',
-                    '身体健康',
-                    '心想事成',
-                    '学业进步',
-                    '工作顺利',
-                    '阖家欢乐',
-                    '恭喜发财',
-                    '万事如意',
-                    '步步高升',
-                    '年年有余'
+                    '月亮的盐',
+                    '荒原',
+                    '重叠',
+                    '私语',
+                    '回声',
+                    '琥珀',
+                    '熄灭',
+                    '漫游',
+                    '瞬时',
+                    '蓝色的忧郁',
+                    '潮汐',
+                    '悬浮',
+                    '颗粒',
+                    '降落',
+                    '透明',
+                    '缝隙',
+                    '旷野',
+                    '呼吸',
+                    '镀金',
+                    '幸存'
                 ];
             }
 
@@ -440,6 +572,44 @@
                 this.autoLaunchInterval = setInterval(() => {
                     this.launchRandom();
                 }, 3000);
+
+                // 每20秒，所有20个诗意意象一起绽放（诗意烟花风暴）
+                setInterval(() => {
+                    this.launchAllPoetryFireworks();
+                }, 20000);
+            }
+
+            launchAllPoetryFireworks() {
+                const poetryTexts = [
+                    '月亮的盐', '荒原', '重叠', '私语', '回声',
+                    '琥珀', '熄灭', '漫游', '瞬时', '蓝色的忧郁',
+                    '潮汐', '悬浮', '颗粒', '降落', '透明',
+                    '缝隙', '旷野', '呼吸', '镀金', '幸存'
+                ];
+
+                // 20个烟花在屏幕不同位置同时升空
+                for (let i = 0; i < poetryTexts.length; i++) {
+                    // 分成4行，每行5个
+                    const row = Math.floor(i / 5);
+                    const col = i % 5;
+
+                    // 计算每个烟花的位置
+                    const paddingX = window.innerWidth * 0.1;
+                    const paddingY = window.innerHeight * 0.1;
+                    const spacingX = (window.innerWidth - paddingX * 2) / 5;
+                    const spacingY = (window.innerHeight * 0.4 - paddingY * 2) / 4;
+
+                    const x = paddingX + col * spacingX + Math.random() * 80 - 40;
+                    const y = paddingY + row * spacingY + Math.random() * window.innerHeight * 0.6;
+
+                    // 延迟发射，创造波浪效果
+                    setTimeout(() => {
+                        this.fireworks.push(new Firework(x, y, '#ff6b6b', poetryTexts[i]));
+                        console.log(`🎆 诗意烟花绽放: ${poetryTexts[i]}`);
+                    }, i * 150); // 每个烟花延迟150ms，创造波浪感
+                }
+
+                console.log('🎇 诗意烟花风暴！20个诗意意象同时升空！');
             }
 
             update() {
@@ -507,6 +677,12 @@
             start() {
                 this.fireworkSystem.startAutoLaunch();
                 this.webhookManager.simulateIncomingBlessing();
+
+                // 提示诗意烟花风暴即将开始
+                setTimeout(() => {
+                    console.log('🎇 准备迎接诗意烟花风暴！每20秒，所有20个诗意意象将一起绽放！');
+                }, 3000);
+
                 this.animate();
             }
 
