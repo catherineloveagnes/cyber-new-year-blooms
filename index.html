@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>除夕赛博烟花 - Cyber New Year Blooms</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            overflow: hidden;
+            background: #0a0a1a;
+            font-family: 'STKaiti', 'KaiTi', '楷体', serif;
+        }
+
+        #canvas {
+            display: block;
+            background: radial-gradient(ellipse at bottom, #0f173a 0%, #000814 100%);
+        }
+
+        .blessing-input {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 10px;
+            z-index: 10;
+        }
+
+        #blessingText {
+            padding: 10px 20px;
+            border: 1px solid rgba(255, 215, 0, 0.3);
+            background: rgba(0, 20, 50, 0.8);
+            color: #ffd700;
+            border-radius: 20px;
+            font-size: 14px;
+            outline: none;
+            font-family: 'STKaiti', 'KaiTi', '楷体', serif;
+        }
+
+        #blessingText::placeholder {
+            color: rgba(255, 215, 0, 0.4);
+        }
+
+        #sendButton {
+            padding: 10px 20px;
+            background: rgba(255, 215, 0, 0.2);
+            border: 1px solid rgba(255, 215, 0, 0.4);
+            color: #ffd700;
+            border-radius: 20px;
+            cursor: pointer;
+            font-family: 'STKaiti', 'KaiTi', '楷体', serif;
+            transition: all 0.3s;
+        }
+
+        #sendButton:hover {
+            background: rgba(255, 215, 0, 0.3);
+        }
+
+        .qr-hint {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            color: rgba(255, 215, 0, 0.6);
+            font-size: 12px;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+
+    <div class="qr-hint">
+        扫码发送祝福 → 吸收进烟花
+    </div>
+
+    <div class="blessing-input">
+        <input type="text" id="blessingText" placeholder="输入祝福..." maxlength="20">
+        <button id="sendButton">点燃</button>
+    </div>
+
+    <script>
+        class Vector2 {
+            constructor(x = 0, y = 0) {
+                this.x = x;
+                this.y = y;
+            }
+
+            add(other) {
+                this.x += other.x;
+                this.y += other.y;
+                return this;
+            }
+
+            sub(other) {
+                this.x -= other.x;
+                this.y -= other.y;
+                return this;
+            }
+
+            mult(scalar) {
+                this.x *= scalar;
+                this.y *= scalar;
+                return this;
+            }
+
+            dist(other) {
+                return Math.sqrt((this.x - other.x) ** 2 + (this.y - other.y) ** 2);
+            }
+
+            clone() {
+                return new Vector2(this.x, this.y);
+            }
+        }
+
+        class Particle {
+            constructor(x, y, color, velocity, lifespan = 100) {
+                this.pos = new Vector2(x, y);
+                this.vel = velocity;
+                this.color = color;
+                this.lifespan = lifespan;
+                this.maxLifespan = lifespan;
+                this.opacity = 1;
+                this.size = Math.random() * 2 + 1;
+            }
+
+            update() {
+                this.vel.y += 0.2; // 重力
+                this.vel.mult(0.98); // 空气阻力
+                this.pos.add(this.vel);
+                this.lifespan--;
+                this.opacity = this.lifespan / this.maxLifespan;
+            }
+
+            draw(ctx) {
+                ctx.globalAlpha = this.opacity;
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.pos.x, this.pos.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalAlpha = 1;
+            }
+
+            isDead() {
+                return this.lifespan <= 0;
+            }
+        }
+
+        class TextParticle extends Particle {
+            constructor(x, y, text, fontSize = 20) {
+                const color = `rgba(255, ${200 + Math.random() * 55}, ${Math.random() * 100}, 1)`;
+                super(x, y, color, new Vector2(0, 0), 200);
+                this.text = text;
+                this.fontSize = fontSize;
+                this.targetPos = new Vector2(x, y);
+                this.formProgress = 0;
+                this.charIndex = 0;
+                this.visibleChars = 0;
+            }
+
+            update() {
+                this.formProgress += 0.02;
+                if (this.formProgress < 1) {
+                    this.visibleChars = Math.floor(this.text.length * this.formProgress);
+                } else {
+                    this.visibleChars = this.text.length;
+                    this.lifespan--;
+                }
+                this.opacity = this.lifespan / this.maxLifespan;
+            }
+
+            draw(ctx) {
+                if (this.formProgress <= 0) return;
+
+                ctx.save();
+                ctx.globalAlpha = this.opacity;
+                ctx.font = `${this.fontSize}px 'STKaiti', 'KaiTi', '楷体', serif`;
+                ctx.fillStyle = this.color;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+
+                const visibleText = this.text.substring(0, this.visibleChars);
+                ctx.fillText(visibleText, this.pos.x, this.pos.y);
+
+                ctx.restore();
+            }
+        }
+
+        class BlessingDanmaku {
+            constructor(text) {
+                this.text = text;
+                this.x = -300;
+                this.y = Math.random() * window.innerHeight * 0.6 + 50;
+                this.speed = Math.random() * 1 + 0.5;
+                this.opacity = 0.8;
+                this.fontSize = Math.random() * 8 + 14;
+                this.color = `rgba(255, ${200 + Math.random() * 55}, ${Math.random() * 100}, ${this.opacity})`;
+                this.absorbed = false;
+            }
+
+            update() {
+                if (!this.absorbed) {
+                    this.x += this.speed;
+                }
+            }
+
+            draw(ctx) {
+                ctx.save();
+                ctx.globalAlpha = this.opacity;
+                ctx.font = `${this.fontSize}px 'STKaiti', 'KaiTi', '楷体', serif`;
+                ctx.fillStyle = this.color;
+                ctx.fillText(this.text, this.x, this.y);
+                ctx.restore();
+            }
+
+            isOffScreen() {
+                return this.x > window.innerWidth + 100;
+            }
+        }
+
+        class Firework {
+            constructor(x, targetY, textColor, blessing = null) {
+                this.startX = x;
+                this.startY = window.innerHeight;
+                this.pos = new Vector2(x, window.innerHeight);
+                this.targetY = targetY;
+                this.textColor = textColor;
+                this.isExploded = false;
+                this.particles = [];
+                this.textParticles = [];
+                this.blessing = blessing;
+                const blessingTexts = ['马', '万事如意', '发财', '平安'];
+                this.text = blessing ? blessing : blessingTexts[Math.floor(Math.random() * blessingTexts.length)];
+                this.speed = Math.random() * 3 + 8;
+                this.trail = [];
+            }
+
+            update() {
+                if (!this.isExploded) {
+                    this.pos.y -= this.speed;
+                    this.trail.push({
+                        pos: this.pos.clone(),
+                        life: 20
+                    });
+
+                    if (this.pos.y <= this.targetY) {
+                        this.explode();
+                    }
+
+                    this.trail = this.trail.filter(t => {
+                        t.life--;
+                        return t.life > 0;
+                    });
+                } else {
+                    this.particles = this.particles.filter(p => {
+                        p.update();
+                        return !p.isDead();
+                    });
+
+                    this.textParticles = this.textParticles.filter(tp => {
+                        tp.update();
+                        return !tp.isDead();
+                    });
+                }
+            }
+
+            explode() {
+                this.isExploded = true;
+                const colors = [
+                    'rgba(255, 100, 100, 1)',
+                    'rgba(255, 215, 0, 1)',
+                    'rgba(255, 200, 200, 1)',
+                    'rgba(255, 255, 200, 1)'
+                ];
+
+                // 创建普通粒子
+                for (let i = 0; i < 80; i++) {
+                    const angle = (Math.PI * 2 * i) / 80;
+                    const vel = Math.random() * 8 + 2;
+                    const vx = Math.cos(angle) * vel;
+                    const vy = Math.sin(angle) * vel - 2;
+                    const color = colors[Math.floor(Math.random() * colors.length)];
+                    this.particles.push(new Particle(this.pos.x, this.pos.y, color, new Vector2(vx, vy)));
+                }
+
+                // 创建文字粒子
+                const chars = this.text.split('');
+                const centerX = this.pos.x;
+                const centerY = this.pos.y;
+                const radius = 60;
+
+                if (chars.length === 1) {
+                    // 单字符（马）在中心
+                    this.textParticles.push(new TextParticle(centerX, centerY, this.text, 40));
+                } else {
+                    // 多字符（如意）环形排列
+                    chars.forEach((char, index) => {
+                        const angle = (index / chars.length) * Math.PI * 2;
+                        const x = centerX + Math.cos(angle) * radius;
+                        const y = centerY + Math.sin(angle) * radius;
+                        this.textParticles.push(new TextParticle(x, y, char, 28));
+                    });
+                }
+            }
+
+            draw(ctx) {
+                if (!this.isExploded) {
+                    // 绘制轨迹
+                    this.trail.forEach((t, i) => {
+                        ctx.globalAlpha = t.life / 20;
+                        ctx.fillStyle = '#ffd700';
+                        ctx.beginPath();
+                        ctx.arc(t.pos.x, t.pos.y, 2, 0, Math.PI * 2);
+                        ctx.fill();
+                    });
+                    ctx.globalAlpha = 1;
+
+                    // 绘制上升的光点
+                    ctx.fillStyle = '#ffd700';
+                    ctx.beginPath();
+                    ctx.arc(this.pos.x, this.pos.y, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                } else {
+                    this.particles.forEach(p => p.draw(ctx));
+                    this.textParticles.forEach(tp => tp.draw(ctx));
+                }
+            }
+
+            isDead() {
+                return this.isExploded && this.particles.length === 0 && this.textParticles.length === 0;
+            }
+        }
+
+        class AudioManager {
+            constructor() {
+                this.bgMusic = null;
+                this.noise = null;
+                this.enabled = false;
+            }
+
+            init() {
+                // 预留音频接口，实际项目中可以接入真实的音频文件
+                console.log('音频模块初始化');
+            }
+
+            playBackground() {
+                console.log('播放Lo-fi背景音乐');
+            }
+
+            playNoise() {
+                console.log('播放鞭炮声音');
+            }
+
+            stop() {
+                console.log('停止所有音频');
+            }
+        }
+
+        class WebhookManager {
+            constructor(danmakuSystem) {
+                this.danmakuSystem = danmakuSystem;
+                this.mockBlessings = [
+                    '新年快乐',
+                    '身体健康',
+                    '心想事成',
+                    '学业进步',
+                    '工作顺利',
+                    '阖家欢乐',
+                    '恭喜发财',
+                    '万事如意',
+                    '步步高升',
+                    '年年有余'
+                ];
+            }
+
+            // 模拟接收祝福
+            simulateIncomingBlessing() {
+                setTimeout(() => {
+                    const blessing = this.mockBlessings[Math.floor(Math.random() * this.mockBlessings.length)];
+                    this.danmakuSystem.addBlessing(blessing);
+                    this.simulateIncomingBlessing();
+                }, Math.random() * 15000 + 10000); // 每10-25秒模拟一个祝福
+            }
+        }
+
+        class DanmakuSystem {
+            constructor(fireworkSystem) {
+                this.blessings = [];
+                this.fireworkSystem = fireworkSystem;
+            }
+
+            addBlessing(text) {
+                this.blessings.push(new BlessingDanmaku(text));
+            }
+
+            update() {
+                this.blessings = this.blessings.filter(blessing => {
+                    blessing.update();
+
+                    // 检查弹幕是否被烟花吸收
+                    if (!blessing.absorbed && Math.random() < 0.005) {
+                        blessing.absorbed = true;
+                        this.fireworkSystem.launchBlessingFirework(blessing.text);
+                        return false;
+                    }
+
+                    return !blessing.isOffScreen();
+                });
+            }
+
+            draw(ctx) {
+                this.blessings.forEach(blessing => blessing.draw(ctx));
+            }
+        }
+
+        class FireworkSystem {
+            constructor() {
+                this.fireworks = [];
+                this.autoLaunchInterval = null;
+            }
+
+            launchRandom() {
+                const x = Math.random() * (window.innerWidth - 200) + 100;
+                const targetY = Math.random() * window.innerHeight * 0.4 + 100;
+                this.fireworks.push(new Firework(x, targetY, '#ffd700'));
+            }
+
+            launchBlessingFirework(blessing) {
+                const x = Math.random() * (window.innerWidth - 200) + 100;
+                const targetY = Math.random() * window.innerHeight * 0.4 + 100;
+                this.fireworks.push(new Firework(x, targetY, '#ff6b6b', blessing));
+            }
+
+            startAutoLaunch() {
+                this.autoLaunchInterval = setInterval(() => {
+                    this.launchRandom();
+                }, 3000);
+            }
+
+            update() {
+                this.fireworks = this.fireworks.filter(fw => {
+                    fw.update();
+                    return !fw.isDead();
+                });
+            }
+
+            draw(ctx) {
+                this.fireworks.forEach(fw => fw.draw(ctx));
+            }
+        }
+
+        // 主应用
+        class App {
+            constructor() {
+                this.canvas = document.getElementById('canvas');
+                this.ctx = this.canvas.getContext('2d');
+
+                this.resize();
+                window.addEventListener('resize', () => this.resize());
+
+                this.audioManager = new AudioManager();
+                this.fireworkSystem = new FireworkSystem();
+                this.danmakuSystem = new DanmakuSystem(this.fireworkSystem);
+                this.webhookManager = new WebhookManager(this.danmakuSystem);
+
+                this.setupEventListeners();
+                this.start();
+            }
+
+            resize() {
+                this.canvas.width = window.innerWidth;
+                this.canvas.height = window.innerHeight;
+            }
+
+            setupEventListeners() {
+                document.getElementById('sendButton').addEventListener('click', () => {
+                    const input = document.getElementById('blessingText');
+                    const text = input.value.trim();
+                    if (text) {
+                        this.danmakuSystem.addBlessing(text);
+                        input.value = '';
+                    }
+                });
+
+                document.getElementById('blessingText').addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        document.getElementById('sendButton').click();
+                    }
+                });
+
+                this.canvas.addEventListener('click', (e) => {
+                    const rect = this.canvas.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+                    if (y > window.innerHeight * 0.6) {
+                        const targetY = window.innerHeight * 0.2 + Math.random() * window.innerHeight * 0.3;
+                        this.fireworkSystem.fireworks.push(new Firework(x, targetY, '#ffd700'));
+                    }
+                });
+            }
+
+            start() {
+                this.fireworkSystem.startAutoLaunch();
+                this.webhookManager.simulateIncomingBlessing();
+                this.animate();
+            }
+
+            animate() {
+                // 创建残影效果
+                this.ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+                // 更新和绘制系统
+                this.fireworkSystem.update();
+                this.danmakuSystem.update();
+
+                this.fireworkSystem.draw(this.ctx);
+                this.danmakuSystem.draw(this.ctx);
+
+                requestAnimationFrame(() => this.animate());
+            }
+        }
+
+        // 启动应用
+        window.addEventListener('load', () => {
+            new App();
+        });
+    </script>
+</body>
+</html>
